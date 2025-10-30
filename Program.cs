@@ -3,21 +3,27 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+// ------------------------------
+// App Configuration
+// ------------------------------
+
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure application port
 builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<TaskStorage>();
 
-// Configure JSON serialization to use camelCase
+// Configure JSON serialization rules
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
 
+// Enable CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
@@ -31,22 +37,27 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Enable Swagger (only in development)
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// Apply middleware
 app.UseCors("AllowAll");
 
 var tasks = app.MapGroup("/api/tasks");
 
+// Retrieve all tasks
 // GET /api/tasks
 tasks.MapGet("/", (TaskStorage storage) =>
 {
     return Results.Ok(storage.GetAll());
 });
 
+// Create a new task
 // POST /api/tasks
 tasks.MapPost("/", ([FromBody] CreateTaskRequest request, TaskStorage storage) =>
 {
@@ -67,6 +78,8 @@ tasks.MapPost("/", ([FromBody] CreateTaskRequest request, TaskStorage storage) =
     return Results.Created($"/api/tasks/{task.Id}", task);
 });
 
+
+// Update a task
 // PUT /api/tasks/{id}
 tasks.MapPut("/{id:guid}", (Guid id, [FromBody] UpdateTaskRequest request, TaskStorage storage) =>
 {
@@ -98,6 +111,7 @@ tasks.MapPut("/{id:guid}", (Guid id, [FromBody] UpdateTaskRequest request, TaskS
     return Results.Ok(task);
 });
 
+// Delete a task
 // DELETE /api/tasks/{id}
 tasks.MapDelete("/{id:guid}", (Guid id, TaskStorage storage) =>
 {
@@ -112,7 +126,9 @@ tasks.MapDelete("/{id:guid}", (Guid id, TaskStorage storage) =>
 
 app.Run();
 
-// Models
+// ------------------------------
+// Data Models
+// ------------------------------
 public class TaskItem
 {
     public Guid Id { get; set; }
@@ -124,7 +140,10 @@ public class TaskItem
 public record CreateTaskRequest(string Title, string? Description);
 public record UpdateTaskRequest(string? Title, string? Description, bool? IsCompleted);
 
-// In-memory storage
+
+// ------------------------------
+// In-memory Task Storage
+// ------------------------------
 public class TaskStorage
 {
     private readonly ConcurrentDictionary<Guid, TaskItem> _tasks = new();
