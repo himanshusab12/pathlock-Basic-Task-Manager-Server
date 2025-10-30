@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +10,13 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PO
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<TaskStorage>();
+
+// Configure JSON serialization to use camelCase
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+});
 
 builder.Services.AddCors(options =>
 {
@@ -19,7 +28,6 @@ builder.Services.AddCors(options =>
                   .AllowAnyMethod();
         });
 });
-
 
 var app = builder.Build();
 
@@ -42,15 +50,16 @@ tasks.MapGet("/", (TaskStorage storage) =>
 // POST /api/tasks
 tasks.MapPost("/", ([FromBody] CreateTaskRequest request, TaskStorage storage) =>
 {
-    if (string.IsNullOrWhiteSpace(request.Description))
+    if (string.IsNullOrWhiteSpace(request.Title))
     {
-        return Results.BadRequest(new { error = "Description is required" });
+        return Results.BadRequest(new { error = "Title is required" });
     }
 
     var task = new TaskItem
     {
         Id = Guid.NewGuid(),
-        Description = request.Description.Trim(),
+        Title = request.Title.Trim(),
+        Description = request.Description?.Trim() ?? string.Empty,
         IsCompleted = false
     };
 
@@ -67,12 +76,17 @@ tasks.MapPut("/{id:guid}", (Guid id, [FromBody] UpdateTaskRequest request, TaskS
         return Results.NotFound(new { error = "Task not found" });
     }
 
+    if (request.Title != null)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return Results.BadRequest(new { error = "Title cannot be empty" });
+        }
+        task.Title = request.Title.Trim();
+    }
+
     if (request.Description != null)
     {
-        if (string.IsNullOrWhiteSpace(request.Description))
-        {
-            return Results.BadRequest(new { error = "Description cannot be empty" });
-        }
         task.Description = request.Description.Trim();
     }
 
@@ -102,34 +116,20 @@ app.Run();
 public class TaskItem
 {
     public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool IsCompleted { get; set; }
 }
 
-public record CreateTaskRequest(string Description);
-public record UpdateTaskRequest(string? Description, bool? IsCompleted);
+public record CreateTaskRequest(string Title, string? Description);
+public record UpdateTaskRequest(string? Title, string? Description, bool? IsCompleted);
 
 // In-memory storage
 public class TaskStorage
 {
     private readonly ConcurrentDictionary<Guid, TaskItem> _tasks = new();
 
-    public TaskStorage()
-    {
-        // Add some sample tasks
-        var sampleTasks = new[]
-        {
-            new TaskItem { Id = Guid.NewGuid(), Description = "Complete the assignment", IsCompleted = false },
-            new TaskItem { Id = Guid.NewGuid(), Description = "Review the code", IsCompleted = false }
-        };
-
-        foreach (var task in sampleTasks)
-        {
-            _tasks.TryAdd(task.Id, task);
-        }
-    }
-
-    public IEnumerable<TaskItem> GetAll() => _tasks.Values.OrderBy(t => t.IsCompleted).ThenBy(t => t.Description);
+    public IEnumerable<TaskItem> GetAll() => _tasks.Values.OrderBy(t => t.IsCompleted).ThenBy(t => t.Title);
 
     public TaskItem? Get(Guid id) => _tasks.TryGetValue(id, out var task) ? task : null;
 
