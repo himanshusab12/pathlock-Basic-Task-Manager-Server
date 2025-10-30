@@ -23,4 +23,4 @@ COPY --from=build /app/out .
 EXPOSE 8080
 
 # Set the entry point (replace 'YourApiProjectName.dll' with your actual DLL name)
-ENTRYPOINT ["dotnet", "project_1_server.dll"]
+ENTRYPOINT ["dotnet", "Server.dll"]
