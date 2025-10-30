@@ -3,19 +3,23 @@ using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<TaskStorage>();
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp",
+    options.AddPolicy("AllowAll",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+            policy.AllowAnyOrigin()
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
 });
+
 
 var app = builder.Build();
 
@@ -25,7 +29,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
 
 var tasks = app.MapGroup("/api/tasks");
 
